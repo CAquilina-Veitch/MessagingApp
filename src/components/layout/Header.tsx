@@ -6,7 +6,7 @@ interface HeaderProps {
   onListsClick?: () => void;
 }
 
-export function Header({ title = 'DuoBoard', showProfile = true, onListsClick }: HeaderProps) {
+export function Header({ title = 'CMail', showProfile = true, onListsClick }: HeaderProps) {
   const { user, signOut } = useAuth();
 
   return (

@@ -17,9 +17,9 @@ import {
 import { db } from '../config/firebase';
 import type { List, ListItem, ListItemWithMessage, Message } from '../types';
 
-const LISTS_COLLECTION = 'lists';
-const LIST_ITEMS_COLLECTION = 'listItems';
-const MESSAGES_COLLECTION = 'messages';
+const LISTS_COLLECTION = 'duoboard_lists';
+const LIST_ITEMS_COLLECTION = 'duoboard_listItems';
+const MESSAGES_COLLECTION = 'duoboard_messages';
 
 export function useLists(userId: string | undefined) {
   const [lists, setLists] = useState<List[]>([]);

@@ -54,7 +54,7 @@ export function ChatPage() {
     if (!otherUserId) return;
 
     const unsubscribe = onSnapshot(
-      doc(db, 'users', otherUserId),
+      doc(db, 'duoboard_users', otherUserId),
       (docSnap) => {
         if (docSnap.exists()) {
           setOtherUser({ uid: docSnap.id, ...docSnap.data() } as User);

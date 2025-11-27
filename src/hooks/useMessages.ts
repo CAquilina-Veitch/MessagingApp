@@ -21,7 +21,7 @@ import { db, storage } from '../config/firebase';
 import type { Message, MessageWithReply, DrawingData } from '../types';
 
 const MESSAGES_PER_PAGE = 50;
-const MESSAGES_COLLECTION = 'messages';
+const MESSAGES_COLLECTION = 'duoboard_messages';
 
 export function useMessages(userId: string | undefined) {
   const [messages, setMessages] = useState<MessageWithReply[]>([]);
@@ -193,7 +193,7 @@ export function useMessages(userId: string | undefined) {
         const blob = await response.blob();
 
         // Upload to Firebase Storage
-        const fileName = `drawings/${userId}_${Date.now()}.png`;
+        const fileName = `duoboard_drawings/${userId}_${Date.now()}.png`;
         const storageRef = ref(storage, fileName);
         await uploadBytes(storageRef, blob);
         const imageUrl = await getDownloadURL(storageRef);

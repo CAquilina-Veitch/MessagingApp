@@ -11,8 +11,8 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    // Messages collection
-    match /messages/{messageId} {
+    // DuoBoard Messages collection
+    match /duoboard_messages/{messageId} {
       // Any authenticated user can read all messages
       allow read: if isAuthenticated();
 
@@ -29,8 +29,8 @@ service cloud.firestore {
         && resource.data.senderId == request.auth.uid;
     }
 
-    // Users collection
-    match /users/{userId} {
+    // DuoBoard Users collection
+    match /duoboard_users/{userId} {
       // Any authenticated user can read user profiles
       allow read: if isAuthenticated();
 
@@ -38,8 +38,8 @@ service cloud.firestore {
       allow write: if isAuthenticated() && isOwner(userId);
     }
 
-    // Lists collection
-    match /lists/{listId} {
+    // DuoBoard Lists collection
+    match /duoboard_lists/{listId} {
       // Read: public lists visible to all, private only to owner
       allow read: if isAuthenticated() && (
         resource.data.visibility == 'public' ||
@@ -59,8 +59,8 @@ service cloud.firestore {
         && resource.data.ownerId == request.auth.uid;
     }
 
-    // List items collection
-    match /listItems/{itemId} {
+    // DuoBoard List items collection
+    match /duoboard_listItems/{itemId} {
       // Read: check parent list visibility
       allow read: if isAuthenticated();
 

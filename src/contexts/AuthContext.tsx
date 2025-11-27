@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Update user document in Firestore
         try {
-          await setDoc(doc(db, 'users', fbUser.uid), userData, { merge: true });
+          await setDoc(doc(db, 'duoboard_users', fbUser.uid), userData, { merge: true });
           setUser(userData);
           setError(null);
         } catch (err) {
