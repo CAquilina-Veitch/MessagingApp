@@ -100,9 +100,11 @@ export function MessageList({
   const getSenderInfo = useCallback(
     (senderId: string) => {
       if (senderId === currentUser.uid) {
-        return { photo: currentUser.photoURL, name: currentUser.displayName };
+        // Prefer custom photo, fallback to Google photo
+        return { photo: currentUser.customPhotoURL || currentUser.photoURL, name: currentUser.displayName };
       }
-      return { photo: otherUser?.photoURL, name: otherUser?.displayName };
+      // Prefer custom photo, fallback to Google photo
+      return { photo: otherUser?.customPhotoURL || otherUser?.photoURL, name: otherUser?.displayName };
     },
     [currentUser, otherUser]
   );

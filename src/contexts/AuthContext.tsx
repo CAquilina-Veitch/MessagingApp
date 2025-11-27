@@ -5,8 +5,9 @@ import {
   onAuthStateChanged,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, googleProvider, db, WHITELISTED_EMAILS } from '../config/firebase';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, googleProvider, db, storage, WHITELISTED_EMAILS } from '../config/firebase';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -16,6 +17,7 @@ interface AuthContextType {
   error: string | null;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  uploadAvatar: (file: File) => Promise<void>;
   isWhitelisted: boolean;
 }
 
@@ -44,11 +46,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(fbUser);
 
       if (fbUser && fbUser.email && WHITELISTED_EMAILS.includes(fbUser.email)) {
+        // Fetch existing user data to get customPhotoURL
+        let existingCustomPhoto: string | undefined;
+        try {
+          const userDoc = await getDoc(doc(db, 'duoboard_users', fbUser.uid));
+          if (userDoc.exists()) {
+            existingCustomPhoto = userDoc.data().customPhotoURL;
+          }
+        } catch (err) {
+          console.error('Error fetching user document:', err);
+        }
+
         const userData: User = {
           uid: fbUser.uid,
           email: fbUser.email,
           displayName: fbUser.displayName || 'Anonymous',
           photoURL: fbUser.photoURL || '',
+          customPhotoURL: existingCustomPhoto,
           lastSeen: serverTimestamp() as any,
         };
 
@@ -109,6 +123,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const uploadAvatar = async (file: File) => {
+    if (!user) {
+      setError('You must be signed in to upload an avatar.');
+      return;
+    }
+
+    try {
+      // Upload to Firebase Storage
+      const storageRef = ref(storage, `duoboard_avatars/${user.uid}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // Update Firestore with new custom photo URL
+      await setDoc(doc(db, 'duoboard_users', user.uid), {
+        customPhotoURL: downloadURL,
+      }, { merge: true });
+
+      // Update local state
+      setUser(prev => prev ? { ...prev, customPhotoURL: downloadURL } : null);
+    } catch (err) {
+      console.error('Error uploading avatar:', err);
+      setError('Failed to upload avatar. Please try again.');
+      throw err;
+    }
+  };
+
   const value: AuthContextType = {
     user,
     firebaseUser,
@@ -116,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error,
     signInWithGoogle,
     signOut,
+    uploadAvatar,
     isWhitelisted,
   };
 
