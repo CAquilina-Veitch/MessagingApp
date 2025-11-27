@@ -14,11 +14,11 @@ const firebaseConfig = {
   measurementId: "G-P3Y1KYM0P9",
 };
 
-// Whitelisted users - exactly 2 emails allowed
+// Whitelisted users
 export const WHITELISTED_EMAILS: string[] = [
-  import.meta.env.VITE_WHITELIST_EMAIL_1 || '',
-  import.meta.env.VITE_WHITELIST_EMAIL_2 || '',
-].filter(Boolean);
+  'codethathat@gmail.com',
+  'marsha.o.y@gmail.com',
+];
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
