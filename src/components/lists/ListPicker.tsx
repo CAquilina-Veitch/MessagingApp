@@ -17,8 +17,6 @@ interface ListPickerProps {
   ) => Promise<string | null>;
 }
 
-const EMOJI_OPTIONS = ['📋', '🎁', '🍜', '📚', '🎬', '🎵', '✈️', '💡', '🛒', '❤️'];
-
 export function ListPicker({
   isOpen,
   message,
@@ -120,23 +118,28 @@ export function ListPicker({
             {showCreateForm ? (
               /* Create form */
               <div className="p-4 space-y-4">
-                {/* Emoji picker */}
+                {/* Emoji input */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Icon</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {EMOJI_OPTIONS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        onClick={() => setNewListEmoji(emoji)}
-                        className={`w-10 h-10 text-xl rounded-lg transition-colors ${
-                          newListEmoji === emoji
-                            ? 'bg-indigo-100 ring-2 ring-indigo-500'
-                            : 'bg-gray-100 hover:bg-gray-200'
-                        }`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Icon</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newListEmoji}
+                      onChange={(e) => {
+                        // Only keep the last character/emoji entered
+                        const value = e.target.value;
+                        if (value.length === 0) {
+                          setNewListEmoji('');
+                        } else {
+                          // Get the last emoji (handling multi-codepoint emojis)
+                          const emojis = [...value];
+                          setNewListEmoji(emojis[emojis.length - 1]);
+                        }
+                      }}
+                      placeholder="📋"
+                      className="w-14 h-14 text-2xl text-center border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                    <span className="text-sm text-gray-500">Type or paste any emoji</span>
                   </div>
                 </div>
 

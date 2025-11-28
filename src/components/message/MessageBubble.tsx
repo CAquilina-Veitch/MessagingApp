@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useDoubleTap, useSwipe, useLongPress } from '../../hooks/useGestures';
+import { useDoubleTap, useSwipe } from '../../hooks/useGestures';
 import type { MessageWithReply } from '../../types';
 
 interface MessageBubbleProps {
@@ -9,7 +9,7 @@ interface MessageBubbleProps {
   senderName?: string;
   onDoubleTap: () => void;
   onSwipeReply: () => void;
-  onLongPress: () => void;
+  onSwipeAddToList: () => void;
   showLikeAnimation: boolean;
   currentUserId: string;
   onNavigateToMessage?: (messageId: string) => void;
@@ -22,7 +22,7 @@ export function MessageBubble({
   senderName,
   onDoubleTap,
   onSwipeReply,
-  onLongPress,
+  onSwipeAddToList,
   showLikeAnimation,
   currentUserId,
   onNavigateToMessage,
@@ -30,8 +30,8 @@ export function MessageBubble({
   const handleDoubleTap = useDoubleTap({ onDoubleTap });
   const { handlers: swipeHandlers, swipeState } = useSwipe({
     onSwipeRight: onSwipeReply,
+    onSwipeLeft: onSwipeAddToList,
   });
-  const { handlers: longPressHandlers } = useLongPress({ onLongPress });
 
   const isLiked = message.likes && Object.keys(message.likes).length > 0;
   const likedByMe = message.likes?.[currentUserId];
@@ -52,7 +52,7 @@ export function MessageBubble({
       }}
       {...swipeHandlers}
     >
-      {/* Reply indicator */}
+      {/* Reply indicator (swipe right) */}
       <AnimatePresence>
         {swipeState.offset > 40 && (
           <motion.div
@@ -73,6 +73,33 @@ export function MessageBubble({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+              />
+            </svg>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add to list indicator (swipe left) */}
+      <AnimatePresence>
+        {swipeState.offset < -40 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="absolute right-0 flex items-center justify-center w-10 h-10 bg-green-100 rounded-full"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-5 h-5 text-green-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
               />
             </svg>
           </motion.div>
@@ -100,7 +127,6 @@ export function MessageBubble({
       <div
         className={`relative max-w-[75%] ${isOwn ? 'items-end' : 'items-start'}`}
         onClick={handleDoubleTap}
-        {...longPressHandlers}
       >
         {/* Reply Preview */}
         {message.replyToMessage && (

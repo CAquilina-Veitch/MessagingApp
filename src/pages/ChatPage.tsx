@@ -107,8 +107,8 @@ export function ChatPage() {
     setReplyingTo(message);
   }, []);
 
-  // Handle long-press to save to list
-  const handleLongPress = useCallback((message: MessageWithReply) => {
+  // Handle swipe left to save to list
+  const handleSwipeAddToList = useCallback((message: MessageWithReply) => {
     setSelectedMessageForList(message);
     setShowListPicker(true);
   }, []);
@@ -156,7 +156,7 @@ export function ChatPage() {
         otherUser={otherUser}
         onDoubleTap={handleDoubleTap}
         onSwipeReply={handleSwipeReply}
-        onLongPress={handleLongPress}
+        onSwipeAddToList={handleSwipeAddToList}
         likeAnimatingMessageId={likeAnimatingId}
         loading={loading}
         loadingMore={loadingMore}

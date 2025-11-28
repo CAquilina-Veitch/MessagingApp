@@ -9,7 +9,7 @@ interface MessageListProps {
   otherUser?: User | null;
   onDoubleTap: (messageId: string) => void;
   onSwipeReply: (message: MessageWithReply) => void;
-  onLongPress: (message: MessageWithReply) => void;
+  onSwipeAddToList: (message: MessageWithReply) => void;
   likeAnimatingMessageId: string | null;
   loading: boolean;
   loadingMore: boolean;
@@ -28,7 +28,7 @@ export function MessageList({
   otherUser,
   onDoubleTap,
   onSwipeReply,
-  onLongPress,
+  onSwipeAddToList,
   likeAnimatingMessageId,
   loading,
   loadingMore,
@@ -128,7 +128,7 @@ export function MessageList({
               senderName={senderInfo.name}
               onDoubleTap={() => onDoubleTap(message.id)}
               onSwipeReply={() => onSwipeReply(message)}
-              onLongPress={() => onLongPress(message)}
+              onSwipeAddToList={() => onSwipeAddToList(message)}
               showLikeAnimation={likeAnimatingMessageId === message.id}
               currentUserId={currentUser.uid}
               onNavigateToMessage={(id) => {
@@ -148,7 +148,7 @@ export function MessageList({
       getSenderInfo,
       onDoubleTap,
       onSwipeReply,
-      onLongPress,
+      onSwipeAddToList,
       likeAnimatingMessageId,
       setItemHeight,
     ]
