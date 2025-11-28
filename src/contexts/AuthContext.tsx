@@ -62,14 +62,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: fbUser.email,
           displayName: fbUser.displayName || 'Anonymous',
           photoURL: fbUser.photoURL || '',
-          customPhotoURL: existingCustomPhoto,
           lastSeen: serverTimestamp() as any,
+          ...(existingCustomPhoto && { customPhotoURL: existingCustomPhoto }),
+        };
+
+        // For local state, include customPhotoURL even if undefined
+        const localUserData: User = {
+          ...userData,
+          customPhotoURL: existingCustomPhoto,
         };
 
         // Update user document in Firestore
         try {
           await setDoc(doc(db, 'duoboard_users', fbUser.uid), userData, { merge: true });
-          setUser(userData);
+          setUser(localUserData);
           setError(null);
         } catch (err) {
           console.error('Error updating user document:', err);
