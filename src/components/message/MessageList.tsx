@@ -42,17 +42,38 @@ export function MessageList({
   const itemHeights = useRef<Record<number, number>>({});
   const [listHeight, setListHeight] = useState(0);
 
-  // Calculate container height
+  // Calculate container height using ResizeObserver for reliable updates
   useEffect(() => {
+    if (!containerRef.current) return;
+
     const updateHeight = () => {
       if (containerRef.current) {
-        setListHeight(containerRef.current.clientHeight);
+        const height = containerRef.current.clientHeight;
+        if (height > 0) {
+          setListHeight(height);
+        }
       }
     };
 
-    updateHeight();
+    // Use ResizeObserver for reliable size detection
+    const resizeObserver = new ResizeObserver(() => {
+      updateHeight();
+    });
+
+    resizeObserver.observe(containerRef.current);
+
+    // Also update on window resize as fallback
     window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
+
+    // Initial update with a small delay to ensure layout is complete
+    updateHeight();
+    const timeoutId = setTimeout(updateHeight, 100);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateHeight);
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   // Auto-scroll to bottom on new messages
@@ -120,6 +141,7 @@ export function MessageList({
           <MessageItemWrapper
             index={index}
             onHeightChange={setItemHeight}
+            hasImage={!!message.imageUrl}
           >
             <MessageBubble
               message={message}
@@ -137,6 +159,7 @@ export function MessageList({
                   listRef.current?.scrollToItem(idx, 'center');
                 }
               }}
+              onImageLoad={() => setItemHeight(index, 0)}
             />
           </MessageItemWrapper>
         </div>
@@ -218,17 +241,39 @@ interface MessageItemWrapperProps {
   index: number;
   onHeightChange: (index: number, height: number) => void;
   children: React.ReactNode;
+  hasImage?: boolean;
 }
 
-function MessageItemWrapper({ index, onHeightChange, children }: MessageItemWrapperProps) {
+function MessageItemWrapper({ index, onHeightChange, children, hasImage }: MessageItemWrapperProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const lastHeightRef = useRef<number>(0);
 
   useEffect(() => {
-    if (ref.current) {
-      const height = ref.current.getBoundingClientRect().height;
-      onHeightChange(index, height + 12); // Add some padding
+    if (!ref.current) return;
+
+    const measureHeight = () => {
+      if (ref.current) {
+        const height = ref.current.getBoundingClientRect().height + 12; // Add some padding
+        // Only update if height changed significantly (avoid infinite loops)
+        if (Math.abs(height - lastHeightRef.current) > 1) {
+          lastHeightRef.current = height;
+          onHeightChange(index, height);
+        }
+      }
+    };
+
+    // Initial measurement
+    measureHeight();
+
+    // Use ResizeObserver for images that load and change height
+    if (hasImage) {
+      const resizeObserver = new ResizeObserver(() => {
+        measureHeight();
+      });
+      resizeObserver.observe(ref.current);
+      return () => resizeObserver.disconnect();
     }
-  }, [index, onHeightChange, children]);
+  }, [index, onHeightChange, hasImage]);
 
   return <div ref={ref}>{children}</div>;
 }

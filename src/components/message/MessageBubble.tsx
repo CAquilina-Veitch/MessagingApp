@@ -13,6 +13,7 @@ interface MessageBubbleProps {
   showLikeAnimation: boolean;
   currentUserId: string;
   onNavigateToMessage?: (messageId: string) => void;
+  onImageLoad?: () => void;
 }
 
 export function MessageBubble({
@@ -26,6 +27,7 @@ export function MessageBubble({
   showLikeAnimation,
   currentUserId,
   onNavigateToMessage,
+  onImageLoad,
 }: MessageBubbleProps) {
   const handleDoubleTap = useDoubleTap({ onDoubleTap });
   const { handlers: swipeHandlers, swipeState } = useSwipe({
@@ -161,6 +163,7 @@ export function MessageBubble({
               alt="Drawing"
               className="max-w-full rounded-lg mb-1"
               style={{ maxHeight: '200px' }}
+              onLoad={onImageLoad}
             />
           )}
 
