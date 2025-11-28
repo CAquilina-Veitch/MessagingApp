@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useLayoutEffect, useCallback, useState } from 'react';
 import { VariableSizeList as List } from 'react-window';
 import { MessageBubble } from './MessageBubble';
 import type { MessageWithReply, User } from '../../types';
@@ -43,7 +43,8 @@ export function MessageList({
   const [listHeight, setListHeight] = useState(0);
 
   // Calculate container height using ResizeObserver for reliable updates
-  useEffect(() => {
+  // Use useLayoutEffect for synchronous measurement before paint
+  useLayoutEffect(() => {
     if (!containerRef.current) return;
 
     const updateHeight = () => {
@@ -55,7 +56,10 @@ export function MessageList({
       }
     };
 
-    // Use ResizeObserver for reliable size detection
+    // Initial synchronous measurement
+    updateHeight();
+
+    // Use ResizeObserver for ongoing size detection
     const resizeObserver = new ResizeObserver(() => {
       updateHeight();
     });
@@ -65,16 +69,29 @@ export function MessageList({
     // Also update on window resize as fallback
     window.addEventListener('resize', updateHeight);
 
-    // Initial update with a small delay to ensure layout is complete
-    updateHeight();
-    const timeoutId = setTimeout(updateHeight, 100);
-
     return () => {
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateHeight);
-      clearTimeout(timeoutId);
     };
   }, []);
+
+  // Fallback: if listHeight is still 0 after mount but we have messages,
+  // try measuring again. This handles edge cases where initial measurement fails.
+  useEffect(() => {
+    if (listHeight === 0 && messages.length > 0 && containerRef.current) {
+      const height = containerRef.current.clientHeight;
+      if (height > 0) {
+        setListHeight(height);
+      } else {
+        // If container still has no height, use a fallback based on window
+        // This ensures the list renders even in edge cases
+        const fallbackHeight = window.innerHeight - 150; // Account for header/input
+        if (fallbackHeight > 0) {
+          setListHeight(fallbackHeight);
+        }
+      }
+    }
+  }, [listHeight, messages.length]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -214,7 +231,7 @@ export function MessageList({
             </div>
           )}
 
-          {listHeight > 0 && (
+          {listHeight > 0 ? (
             <List
               ref={listRef}
               height={listHeight}
@@ -227,6 +244,11 @@ export function MessageList({
             >
               {Row}
             </List>
+          ) : (
+            // Fallback loading state while height is being measured
+            <div className="h-full flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+            </div>
           )}
         </>
       )}
