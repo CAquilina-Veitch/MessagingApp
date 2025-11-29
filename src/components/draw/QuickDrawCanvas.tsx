@@ -25,26 +25,48 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
   const [lightness, setLightness] = useState(20);
   const [penSize, setPenSize] = useState(4);
 
+  // Undo history
+  const [history, setHistory] = useState<ImageData[]>([]);
+  const isStrokeStartRef = useRef(false);
+
+  // Long press detection for fill
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressPosRef = useRef<Point | null>(null);
+  const LONG_PRESS_DURATION = 400; // ms
+
   // Canvas dimensions - bigger now
   const CANVAS_WIDTH = 400;
   const CANVAS_HEIGHT = 300;
+
+  // Device pixel ratio for sharp rendering
+  const dprRef = useRef(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
 
   // Get current color as HSL string
   const getCurrentColor = useCallback(() => {
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
   }, [hue, saturation, lightness]);
 
-  // Initialize canvas
+  // Initialize canvas with DPR scaling
   useEffect(() => {
     if (isOpen && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      const dpr = dprRef.current;
+
+      // Set the canvas internal size scaled by DPR
+      canvas.width = CANVAS_WIDTH * dpr;
+      canvas.height = CANVAS_HEIGHT * dpr;
+
       if (ctx) {
+        // Scale the context to account for DPR
+        ctx.scale(dpr, dpr);
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
       }
       setHasContent(false);
+      setHistory([]);
     }
   }, [isOpen]);
 
@@ -62,8 +84,9 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
     if (!canvas) return { x: 0, y: 0 };
 
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    // Since we scale the context by DPR, we use logical dimensions for scaling
+    const scaleX = CANVAS_WIDTH / rect.width;
+    const scaleY = CANVAS_HEIGHT / rect.height;
 
     let clientX: number, clientY: number;
 
@@ -81,11 +104,157 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
     };
   }, []);
 
+  // Save current canvas state to history
+  const saveToHistory = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    const dpr = dprRef.current;
+    const imageData = ctx.getImageData(0, 0, CANVAS_WIDTH * dpr, CANVAS_HEIGHT * dpr);
+    setHistory(prev => [...prev, imageData]);
+  }, []);
+
+  // Undo last action
+  const handleUndo = useCallback(() => {
+    if (history.length === 0) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    const dpr = dprRef.current;
+    const newHistory = [...history];
+    const previousState = newHistory.pop();
+
+    if (previousState) {
+      ctx.putImageData(previousState, 0, 0);
+      setHistory(newHistory);
+
+      // Check if canvas is empty (all white)
+      const checkData = ctx.getImageData(0, 0, CANVAS_WIDTH * dpr, CANVAS_HEIGHT * dpr);
+      let isEmpty = true;
+      for (let i = 0; i < checkData.data.length; i += 4) {
+        if (checkData.data[i] !== 255 || checkData.data[i + 1] !== 255 || checkData.data[i + 2] !== 255) {
+          isEmpty = false;
+          break;
+        }
+      }
+      setHasContent(!isEmpty);
+    }
+  }, [history]);
+
+  // Flood fill algorithm
+  const floodFill = useCallback((startX: number, startY: number) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    const dpr = dprRef.current;
+    const width = CANVAS_WIDTH * dpr;
+    const height = CANVAS_HEIGHT * dpr;
+
+    // Save state before fill
+    saveToHistory();
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+
+    // Scale start position by DPR
+    const sx = Math.floor(startX * dpr);
+    const sy = Math.floor(startY * dpr);
+
+    // Get the color at the start position
+    const startIdx = (sy * width + sx) * 4;
+    const startR = data[startIdx];
+    const startG = data[startIdx + 1];
+    const startB = data[startIdx + 2];
+
+    // Parse current color to RGB
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 1;
+    tempCanvas.height = 1;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+    tempCtx.fillStyle = getCurrentColor();
+    tempCtx.fillRect(0, 0, 1, 1);
+    const fillColorData = tempCtx.getImageData(0, 0, 1, 1).data;
+    const fillR = fillColorData[0];
+    const fillG = fillColorData[1];
+    const fillB = fillColorData[2];
+
+    // Don't fill if clicking on same color
+    if (startR === fillR && startG === fillG && startB === fillB) return;
+
+    const colorMatch = (idx: number) => {
+      return (
+        Math.abs(data[idx] - startR) < 10 &&
+        Math.abs(data[idx + 1] - startG) < 10 &&
+        Math.abs(data[idx + 2] - startB) < 10
+      );
+    };
+
+    const setColor = (idx: number) => {
+      data[idx] = fillR;
+      data[idx + 1] = fillG;
+      data[idx + 2] = fillB;
+      data[idx + 3] = 255;
+    };
+
+    // BFS flood fill
+    const stack: [number, number][] = [[sx, sy]];
+    const visited = new Set<string>();
+
+    while (stack.length > 0) {
+      const [x, y] = stack.pop()!;
+      const key = `${x},${y}`;
+
+      if (x < 0 || x >= width || y < 0 || y >= height) continue;
+      if (visited.has(key)) continue;
+
+      const idx = (y * width + x) * 4;
+      if (!colorMatch(idx)) continue;
+
+      visited.add(key);
+      setColor(idx);
+
+      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    setHasContent(true);
+  }, [getCurrentColor, saveToHistory]);
+
+  // Cancel long press timer
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressPosRef.current = null;
+  }, []);
+
   const startDrawing = useCallback(
     (e: React.TouchEvent | React.MouseEvent) => {
       e.preventDefault();
       const point = getCanvasPoint(e);
       lastPointRef.current = point;
+      isStrokeStartRef.current = true;
+
+      // Save state before drawing (only once per stroke)
+      saveToHistory();
+
+      // Set up long press detection for fill
+      longPressPosRef.current = point;
+      longPressTimerRef.current = setTimeout(() => {
+        if (longPressPosRef.current) {
+          // Long press detected - do fill
+          floodFill(longPressPosRef.current.x, longPressPosRef.current.y);
+          cancelLongPress();
+          setIsDrawing(false);
+        }
+      }, LONG_PRESS_DURATION);
+
       setIsDrawing(true);
 
       const ctx = canvasRef.current?.getContext('2d');
@@ -99,7 +268,7 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
         setHasContent(true);
       }
     },
-    [getCanvasPoint, getCurrentColor, penSize]
+    [getCanvasPoint, getCurrentColor, penSize, saveToHistory, floodFill, cancelLongPress]
   );
 
   const draw = useCallback(
@@ -108,6 +277,16 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
       e.preventDefault();
 
       const point = getCanvasPoint(e);
+
+      // Cancel long press if user moves significantly
+      if (longPressPosRef.current) {
+        const dx = point.x - longPressPosRef.current.x;
+        const dy = point.y - longPressPosRef.current.y;
+        if (Math.sqrt(dx * dx + dy * dy) > 5) {
+          cancelLongPress();
+        }
+      }
+
       const ctx = canvasRef.current?.getContext('2d');
 
       if (ctx) {
@@ -120,22 +299,27 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
       lastPointRef.current = point;
       setHasContent(true);
     },
-    [isDrawing, getCanvasPoint]
+    [isDrawing, getCanvasPoint, cancelLongPress]
   );
 
   const stopDrawing = useCallback(() => {
     setIsDrawing(false);
     lastPointRef.current = null;
-  }, []);
+    cancelLongPress();
+  }, [cancelLongPress]);
 
   const handleClear = useCallback(() => {
     const ctx = canvasRef.current?.getContext('2d');
     if (ctx) {
+      // Save state before clear for undo
+      if (hasContent) {
+        saveToHistory();
+      }
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
     setHasContent(false);
-  }, []);
+  }, [hasContent, saveToHistory]);
 
   const handleSend = useCallback(() => {
     if (!canvasRef.current || !hasContent) return;
@@ -260,10 +444,12 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
               <div className="flex-1 relative bg-gray-50 rounded-xl overflow-hidden border-2 border-dashed border-gray-200">
                 <canvas
                   ref={canvasRef}
-                  width={CANVAS_WIDTH}
-                  height={CANVAS_HEIGHT}
                   className="w-full touch-none cursor-crosshair"
-                  style={{ aspectRatio: `${CANVAS_WIDTH}/${CANVAS_HEIGHT}` }}
+                  style={{
+                    aspectRatio: `${CANVAS_WIDTH}/${CANVAS_HEIGHT}`,
+                    width: '100%',
+                    height: 'auto'
+                  }}
                   onTouchStart={startDrawing}
                   onTouchMove={draw}
                   onTouchEnd={stopDrawing}
@@ -274,7 +460,7 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
                 />
                 {!hasContent && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <p className="text-gray-400 text-sm">Draw something!</p>
+                    <p className="text-gray-400 text-sm">Draw or hold to fill!</p>
                   </div>
                 )}
               </div>
@@ -308,13 +494,37 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
 
             {/* Actions */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-              <button
-                onClick={handleClear}
-                disabled={!hasContent}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Clear
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleClear}
+                  disabled={!hasContent}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={handleUndo}
+                  disabled={history.length === 0}
+                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Undo"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                    />
+                  </svg>
+                  <span>Undo</span>
+                </button>
+              </div>
               <button
                 onClick={handleSend}
                 disabled={!hasContent}
