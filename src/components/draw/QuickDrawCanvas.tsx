@@ -32,6 +32,7 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
   // Long press detection for fill
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressPosRef = useRef<Point | null>(null);
+  const fillTargetColorRef = useRef<{ r: number; g: number; b: number } | null>(null);
   const LONG_PRESS_DURATION = 400; // ms
 
   // Canvas dimensions - bigger now
@@ -145,30 +146,22 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
   }, [history]);
 
   // Flood fill algorithm
-  const floodFill = useCallback((startX: number, startY: number) => {
+  const floodFill = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    if (!canvas || !ctx || !fillTargetColorRef.current) return;
 
     const dpr = dprRef.current;
     const width = CANVAS_WIDTH * dpr;
     const height = CANVAS_HEIGHT * dpr;
 
-    // Save state before fill
-    saveToHistory();
-
     const imageData = ctx.getImageData(0, 0, width, height);
     const data = imageData.data;
 
-    // Scale start position by DPR
-    const sx = Math.floor(startX * dpr);
-    const sy = Math.floor(startY * dpr);
-
-    // Get the color at the start position
-    const startIdx = (sy * width + sx) * 4;
-    const startR = data[startIdx];
-    const startG = data[startIdx + 1];
-    const startB = data[startIdx + 2];
+    // Use the stored target color (sampled before dot was drawn)
+    const startR = fillTargetColorRef.current.r;
+    const startG = fillTargetColorRef.current.g;
+    const startB = fillTargetColorRef.current.b;
 
     // Parse current color to RGB
     const tempCanvas = document.createElement('canvas');
@@ -183,7 +176,7 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
     const fillG = fillColorData[1];
     const fillB = fillColorData[2];
 
-    // Don't fill if clicking on same color
+    // Don't fill if target is same as fill color
     if (startR === fillR && startG === fillG && startB === fillB) return;
 
     const colorMatch = (idx: number) => {
@@ -200,6 +193,11 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
       data[idx + 2] = fillB;
       data[idx + 3] = 255;
     };
+
+    // Get start position from stored long press position
+    if (!longPressPosRef.current) return;
+    const sx = Math.floor(longPressPosRef.current.x * dpr);
+    const sy = Math.floor(longPressPosRef.current.y * dpr);
 
     // BFS flood fill
     const stack: [number, number][] = [[sx, sy]];
@@ -223,7 +221,7 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
 
     ctx.putImageData(imageData, 0, 0);
     setHasContent(true);
-  }, [getCurrentColor, saveToHistory]);
+  }, [getCurrentColor]);
 
   // Cancel long press timer
   const cancelLongPress = useCallback(() => {
@@ -232,6 +230,7 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
       longPressTimerRef.current = null;
     }
     longPressPosRef.current = null;
+    fillTargetColorRef.current = null;
   }, []);
 
   const startDrawing = useCallback(
@@ -241,6 +240,18 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
       lastPointRef.current = point;
       isStrokeStartRef.current = true;
 
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (!canvas || !ctx) return;
+
+      const dpr = dprRef.current;
+
+      // Sample the color at touch point BEFORE drawing (for flood fill)
+      const px = Math.floor(point.x * dpr);
+      const py = Math.floor(point.y * dpr);
+      const pixelData = ctx.getImageData(px, py, 1, 1).data;
+      fillTargetColorRef.current = { r: pixelData[0], g: pixelData[1], b: pixelData[2] };
+
       // Save state before drawing (only once per stroke)
       saveToHistory();
 
@@ -249,7 +260,7 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
       longPressTimerRef.current = setTimeout(() => {
         if (longPressPosRef.current) {
           // Long press detected - do fill
-          floodFill(longPressPosRef.current.x, longPressPosRef.current.y);
+          floodFill();
           cancelLongPress();
           setIsDrawing(false);
         }
@@ -257,16 +268,13 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
 
       setIsDrawing(true);
 
-      const ctx = canvasRef.current?.getContext('2d');
-      if (ctx) {
-        ctx.strokeStyle = getCurrentColor();
-        ctx.lineWidth = penSize;
-        ctx.beginPath();
-        ctx.moveTo(point.x, point.y);
-        ctx.lineTo(point.x, point.y);
-        ctx.stroke();
-        setHasContent(true);
-      }
+      ctx.strokeStyle = getCurrentColor();
+      ctx.lineWidth = penSize;
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y);
+      ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+      setHasContent(true);
     },
     [getCanvasPoint, getCurrentColor, penSize, saveToHistory, floodFill, cancelLongPress]
   );
@@ -447,14 +455,15 @@ export function QuickDrawCanvas({ isOpen, onClose, onSend }: QuickDrawCanvasProp
               </div>
 
               {/* Canvas */}
-              <div className="flex-1 relative bg-gray-50 rounded-xl overflow-hidden border-2 border-dashed border-gray-200">
+              <div className="flex-1 flex items-center justify-center relative bg-gray-50 rounded-xl overflow-hidden border-2 border-dashed border-gray-200">
                 <canvas
                   ref={canvasRef}
-                  className="w-full touch-none cursor-crosshair"
+                  className="touch-none cursor-crosshair"
                   style={{
-                    aspectRatio: `${CANVAS_WIDTH}/${CANVAS_HEIGHT}`,
-                    width: '100%',
-                    height: 'auto'
+                    width: `${CANVAS_WIDTH}px`,
+                    height: `${CANVAS_HEIGHT}px`,
+                    maxWidth: '100%',
+                    maxHeight: '100%',
                   }}
                   onTouchStart={startDrawing}
                   onTouchMove={draw}
